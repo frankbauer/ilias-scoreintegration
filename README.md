@@ -6,7 +6,7 @@
 
 **Company**:  Friedrich-Alexander-Universität, Visual Computing
 
-**Supports**: ILIAS 7
+**Supports**: ILIAS 9
 
 ## License
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
@@ -23,11 +23,13 @@ CodeQuestionScoreIntegration` directory to your ILIAS installation at the follow
 (create subdirectories, if neccessary):
 `Customizing/global/plugins/Services/UIComponent/UserInterfaceHook/CodeQuestionScoreIntegration`
 
-2. Go to Administration > Plugins
+2. You need to update the classmap after installing any Plugin. In the folder of your ILIAS installation, call `composer install --no-dev` to  regenerate the class map and build the static artifacts map. 
+3. Go to Administration > Plugins. If you do not see the plugin, your static artifact map needs to be rebuilt. You can rebuild those by calling `php setup/cli.php build-artifacts` in the folder of your ILIAS installation.
 
-3. Choose **Update** for the `CodeQuestionScoreIntegration` plugin
-4. Choose **Activate** for the `CodeQuestionScoreIntegration` plugin
-5. Choose **Refresh** for the `CodeQuestionScoreIntegration` plugin languages
+
+4. Choose **Update** for the `CodeQuestionScoreIntegration` plugin
+5. Choose **Activate** for the `CodeQuestionScoreIntegration` plugin
+6. Choose **Refresh** for the `CodeQuestionScoreIntegration` plugin languages
 
 There is nothing to configure for this plugin.
 
