@@ -11,7 +11,7 @@ include_once("./Services/UIComponent/classes/class.ilUserInterfaceHookPlugin.php
  */
 class ilCodeQuestionScoreIntegrationPlugin extends ilUserInterfaceHookPlugin
 {
-	function getPluginName()
+	function getPluginName():string
 	{
 		return "CodeQuestionScoreIntegration";
 	}

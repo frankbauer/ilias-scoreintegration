@@ -1,8 +1,8 @@
 <?php
 require_once ('Modules/Test/classes/class.ilObjTest.php');
-require_once('./Services/FileUpload/classes/class.ilFileUploadGUI.php');
+//require_once('Services/FileUpload/classes/class.ilFileUploadGUI.php');
 require_once 'Services/Form/classes/class.ilPropertyFormGUI.php';
-
+require_once 'ilCodeQuestionScoreIntegration.helper.php';
 /**
  * Extended Test Statistic Page GUI
  *
@@ -20,7 +20,7 @@ class ilCodeQuestionScoreIntegrationPageGUI
 	protected $tpl;
 
 	/** @var ilCodeQuestionScoreIntegrationPlugin $plugin */
-	protected $plugin;
+	protected ilCodeQuestionScoreIntegrationPlugin  $plugin;
 
 	/** @var ilObjTest $testObj */
 	protected $testObj;
@@ -40,8 +40,8 @@ class ilCodeQuestionScoreIntegrationPageGUI
 
 		$lng->loadLanguageModule('assessment');
 
-		$this->plugin = ilPlugin::getPluginObject(IL_COMP_SERVICE, 'UIComponent', 'uihk', 'CodeQuestionScoreIntegration');
-		$this->plugin->includeClass('class.ilCodeQuestionScoreIntegration.php');
+		$this->plugin = ilCodeQuestionScoreIntegration_initPluginObject('CodeQuestionScoreIntegration');
+		//$this->plugin->includeClass('class.ilCodeQuestionScoreIntegration.php');
 		$this->plugin->loadLanguageModule();
 
 		$this->testObj = new ilObjTest($_GET['ref_id']);
@@ -283,6 +283,7 @@ class ilCodeQuestionScoreIntegrationPageGUI
 		$info_tpl->setVariable("NUMBER_STORED", $count);
 
 		//ERROR
+		$error_count = $countu + count($results['wrongTest']) + count($results['invalidComment']);
 		if ($countu>0){
 			$err_tpl->setCurrentBlock("unprocessed_line");
 			foreach($results["files"] as $file){
@@ -327,8 +328,18 @@ class ilCodeQuestionScoreIntegrationPageGUI
 			$err_tpl->parseCurrentBlock();
 		}
 		
+		if ($error_count > 0){
+			$this->tpl->setOnScreenMessage('failure', 'There were ' . $error_count . ' Problems while importing!');
+			$this->tpl->setOnScreenMessage('failure', $err_tpl->get());
+		} else {
+			$this->tpl->setOnScreenMessage('success', 'All records were imported.');
+			$this->tpl->setOnScreenMessage('info', $info_tpl->get());
+		}
+
+		/*
 		ilUtil::sendSuccess($info_tpl->get(), true);
 		ilUtil::sendFailure($err_tpl->get(), true);
+		*/
 		return $tpl->get();
 	}
 
@@ -383,7 +394,7 @@ class ilCodeQuestionScoreIntegrationPageGUI
 		$this->tpl->setLocator();
 		$this->tpl->setTitle($this->testObj->getPresentationTitle());
 		$this->tpl->setDescription($this->testObj->getLongDescription());
-		$this->tpl->setTitleIcon(ilObject::_getIcon('', 'big', 'tst'), $lng->txt('obj_tst'));
+		$this->tpl->setTitleIcon(ilObject::_getIcon(0, 'big', 'tst'), $lng->txt('obj_tst'));
 		$this->tpl->addCss($this->plugin->getStyleSheetLocation('uicodequestionscore.css'));		
 
 		return true;

@@ -36,7 +36,7 @@ class ilCodeQuestionScoreIntegrationUIHookGUI extends ilUIHookPluginGUI
 	 *
 	 * @return array array with entries "mode" => modification mode, "html" => your html
 	 */
-	function getHTML($a_comp, $a_part, $a_par = array())
+	function getHTML(string $a_comp, string $a_part, array $a_par = []): array
 	{
 		return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
 	}
@@ -61,7 +61,7 @@ class ilCodeQuestionScoreIntegrationUIHookGUI extends ilUIHookPluginGUI
 	 * @param string $a_part string that identifies the part of the UI that is handled
 	 * @param string $a_par array of parameters (depend on $a_comp and $a_part)
 	 */
-	function modifyGUI($a_comp, $a_part, $a_par = array())
+	function modifyGUI(string $a_comp, string $a_part, array $a_par = []): void
 	{
 		global $ilCtrl, $ilTabs;
 		

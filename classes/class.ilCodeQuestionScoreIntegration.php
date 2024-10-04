@@ -23,6 +23,8 @@ class ilCodeQuestionScoreIntegration
 	/** @var ilCodeQuestionScoreIntegrationPlugin $plugin */
 	protected $plugin;
 
+	protected \ILIAS\TestQuestionPool\QuestionInfoService $questioninfo;
+
 	/**
 	 * ilCodeQuestionScoreIntegration constructor.
 	 *
@@ -31,10 +33,11 @@ class ilCodeQuestionScoreIntegration
 	 */
 	public function __construct($a_test_obj, $a_plugin)
 	{
-		global $lng;
+		global $lng, $DIC;
 		$lng->loadLanguageModule('assessment');
 		$this->testObj = $a_test_obj;
 		$this->plugin = $a_plugin;
+		$this->questioninfo = $DIC->testQuestionPool()->questionInfo();
 	}
 
 // fred: new function logAction
@@ -105,7 +108,8 @@ class ilCodeQuestionScoreIntegration
 			$ilUser->getFullname() . " (" . $ilUser->getLogin() . ")",
 			$reachedPoints,
 			ilObjTestAccess::_getParticipantData($active_fi),
-			assQuestion::_getQuestionTitle($question_fi));
+			$this->questioninfo->getQuestionTitle($question_fi) //assQuestion::_getQuestionTitle($question_fi)			
+		);
 
 		$this->logAction($logtext, $question_fi);
 // fred.
@@ -129,17 +133,6 @@ class ilCodeQuestionScoreIntegration
         if ($setManScoringDone){
             ilTestService::setManScoringDone($active_fi, true);
         }
-
-
-// fred: In StudOn this is done in recalculateSolutions (patched)
-//
-//		include_once "./Modules/Test/classes/class.ilObjTestAccess.php";
-//		include_once("./Services/Tracking/classes/class.ilLPStatusWrapper.php");
-//		ilLPStatusWrapper::_updateStatus(
-//				$this->testObj->getId(),
-//				ilObjTestAccess::_getParticipantId($active_fi)
-//		);
-// fred.
 	}
 
 // fred: copied from assQuestion and modified
@@ -208,6 +201,8 @@ class ilCodeQuestionScoreIntegration
 // fred.
 
 	function processZipFile($zipFile){
+		global $ilDB;
+
 		$zip = new ZipArchive();
 		$zip->open($zipFile);
 		$result = array(
@@ -236,10 +231,11 @@ class ilCodeQuestionScoreIntegration
 
 			$matches = array();
 			preg_match_all(':test-([0-9]+)/question-([0-9]+)/solution-([0-9]+)-([0-9]+)-([0-9]+)-([0-9]+)-(.*)/(.*):', $filePath, $matches);
-			if (count($matches)!=9 || trim($matches[8][0])=='' || count($matches[0])==0) {
-				$result['unparsableEntries'][] = $item['name'];
+			
+			if (count($matches)!=9 || count($matches[0])==0 || count($matches[8])==0 || trim($matches[8][0])=='' ) {
+				$result['unparsableEntries'][] = $item['name'];				
 				continue;
-			}			
+			} 			
 			$fileName = trim($matches[8][0]);
 
 			$obj = array(
@@ -273,18 +269,14 @@ class ilCodeQuestionScoreIntegration
 		}
 		$this->storeInfo($result);
 
-
-// fred: put to the end
 		//we may have to do this only once!
 		require_once './Modules/Test/classes/class.ilTestScoring.php';
-		$scorer = new ilTestScoring($this->testObj);
+		$scorer = new ilTestScoring($this->testObj,  $ilDB);
 		$scorer->setPreserveManualScores(true);
 		$scorer->recalculateSolutions();
 
 		$logtext = $this->plugin->txt('log_recalculated_solutions');
 		$this->logAction($logtext);
-// fred.
-
 
 		return $result;
 	}
@@ -296,15 +288,19 @@ class ilCodeQuestionScoreIntegration
         if ($passOverride){
             $data = $this->testObj->getCompleteEvaluationData(TRUE);
         }
-        
+        $questions = [];
 		foreach($zipResults['files'] as &$obj){
-			$objQuestion = $questions[$obj["questionID"]];
+			$objQuestion = NULL;
+			if (isset($questions[$obj["questionID"]])){
+				$objQuestion = $questions[$obj["questionID"]];
+			}
+
 			if (!$objQuestion){
 				$objQuestion = $this->testObj->_instanciateQuestion($obj["questionID"]);
 				$questions[$obj["questionID"]] = $objQuestion;
 			}
 			$solution = null;
-            $pointPass = $solution['pass'];
+            $pointPass = 0; //$solution['pass'];
             if ($passOverride){                
                 $userInfo = $data->getParticipant($obj["activeID"]);
                 $pointPass = $userInfo->getScoredPass();                
@@ -387,8 +383,12 @@ class ilCodeQuestionScoreIntegration
                 if (!is_array($questions)) continue;
 				foreach($questions as $question)
 				{
-					$questionBase = $tempBase.'/'.sprintf("question-%06d", $question["id"]);					
-					$objQuestion = $questions[$question["id"]];
+					$questionBase = $tempBase.'/'.sprintf("question-%06d", $question["id"]);	
+					$objQuestion = NULL;
+					if (isset($question["id"]) && isset($questions[$question["id"]])){
+						$objQuestion = $questions[$question["id"]];
+					}
+
 					if (!$objQuestion){
 						$objQuestion = $this->testObj->_instanciateQuestion($question["id"]);
 						$questions[$question["id"]] = $objQuestion;
@@ -478,7 +478,7 @@ class ilCodeQuestionScoreIntegration
 
                         //add the question-text and other meta info to download
 						{
-                            $info = ['title'=>$objQuestion->title, 'hint'=>$objQuestion->comment, 'description'=>$objQuestion->question];
+                            $info = ['title'=>$objQuestion->getTitle(), 'hint'=>$objQuestion->getComment(), 'description'=>$objQuestion->getQuestion()];
 							$zip->addFromString($subFolder.'/meta.json', json_encode($info));
 						}
 
@@ -608,11 +608,23 @@ class ilCodeQuestionScoreIntegration
 	}
 
 	protected function createCommentFile($zip, $userdata, $questionBase, $objQuestion, $active_id, $pass, $solution=null){
-
 		if ($solution == null) {
-			$solution = $objQuestion->getSolutionValues($active_id, $pass);
-			if (count($solution)>0) $solution = $solution[count($solution)-1];			
+			$solution = $objQuestion->getSolutionValues($active_id, $pass);		
+			if (count($solution)>0) $solution = $solution[count($solution)-1];				
+		}		
+		if (!isset($solution) || !isset($solution['solution_id'])) {
+			return sprintf("empty-%06d-%06d-%06d-%s", $active_id , $pass, $userdata->user_id, $userdata->login);
 		}
+		
+		// print("createCommentFile<br>");
+		// print("active_id:" . $active_id . "<br>");
+		// print("pass:" . $pass . "<br>");
+		// print_r($solution);
+		// print('solution_id: ' . $solution['solution_id'] . '<br>');
+		// print('active_fi: ' . $solution['active_fi'] . '<br>');
+		// print('pass: ' . $solution['pass'] . '<br>');
+		// print('user_id: ' . $userdata->user_id . '<br>');
+		// print('login: ' . $userdata->login . '<br>');
 		$subFolder = sprintf("solution-%06d-%06d-%06d-%06d-%s", $solution['solution_id'], $solution['active_fi'], $solution['pass'],$userdata->user_id, $userdata->login);
 		$subFolder = $questionBase.'/'.preg_replace('/[^A-Za-z0-9_\-]/', '', $subFolder);
 		
