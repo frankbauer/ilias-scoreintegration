@@ -6,14 +6,7 @@
     <div class="card-body">
         <h3 class="card-title">{H_ARCH}</h3>
         <p class="card-text">{TXT_ARCH}</p>
-        <form action="{LINK_ZIP}" method="post">  
-            <div>
-                <input type="checkbox" name="ignoreEmpty" value="1" style="margin-bottom:4px" /> <b>{IGNORE_EMPTY_TEXT}</b><br>
-                <input type="checkbox" name="autoFileName" value="1" style="margin-bottom:32px" checked selected /> <b>{USE_AUTO_FILE}</b>
-            </div>              
-            <button class="btn btn-default" type="submit">{DNL_ARCH}</button> 
-            
-        </form>
+        {FILE_DOWNLOAD}       
     </div>
 </div>
 <!-- <div id="exportingTex">

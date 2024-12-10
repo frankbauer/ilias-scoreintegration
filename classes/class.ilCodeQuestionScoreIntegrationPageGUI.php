@@ -44,7 +44,30 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 	}
 
 	private function redirectToIndex() {
-		ilUtil::redirect('ilias.php?baseClass=iluipluginroutergui&cmdNode=we:xh&cmdClass=ilCodeQuestionScoreintegrationpagegui&cmd=showMainAutoScorePage&ref_id=' . $this->testObj->getRefId());
+		$this->debug("Redirecting to index for test: " . $this->testObj->getRefId());
+		ilUtil::redirect('ilias.php?baseClass=iluipluginroutergui&cmdNode=14z:7k&cmdClass=ilCodeQuestionScoreIntegrationPageGUI&cmd=showMainAutoScorePage&ref_id=270' . $this->testObj->getRefId());
+	}
+
+	private function sendFailure($message) {
+		global $DIC;
+		$DIC->ui()->mainTemplate()->setOnScreenMessage("failure", $message);
+	}
+
+	private function sendSuccess($message) {
+		global $DIC;
+		$DIC->ui()->mainTemplate()->setOnScreenMessage("success", $message);
+	}
+
+	private function log($message) {
+		global $DIC;
+		$ilLog = $DIC->logger()->root();
+		$ilLog->info($message);
+	}
+
+	private function debug($message) {
+		global $DIC;
+		$ilLog = $DIC->logger()->root();
+		$ilLog->debug($message);
 	}
 
 	/**
@@ -55,13 +78,14 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		/** @var ilAccessHandler $ilAccess */
 		/** @var ilErrorHandling $ilErr */
 		global $ilAccess, $ilErr, $lng;
+		
 
 		if (!$ilAccess->checkAccess('write', '', $this->testObj->getRefId())) {
-			ilUtil::sendFailure($lng->txt("permission_denied"), true);
+			$this->sendFailure($lng->txt("permission_denied"), true);
 			$this->redirectToIndex();
 		}
 		$cmd = $this->ctrl->getCmd('showMainAutoScorePage');
-
+		$this->debug("Command: " . $cmd);
 		switch ($cmd) {
 			case 'uploadFiles':
 				$this->prepareOutput();
@@ -80,7 +104,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 				$this->sendZIP(TRUE);
 				break;
 			default:
-				ilUtil::sendFailure($lng->txt("permission_denied"), true);
+			  $this->sendFailure($lng->txt("permission_denied"), true);
 				$this->redirectToIndex();
 				break;
 		}
@@ -117,6 +141,39 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		return $max_filesize;
 	}
 
+		/**
+	 * Prepares Archive download.
+	 * @return ilPropertyFormGUI
+	 */
+	public function getFileDownloadForm() {
+		/**
+		 * @var $lng ilLanguage
+		 */
+		global $lng, $ilCtrl;
+
+		$form = new ilPropertyFormGUI();
+		$form->setId("download");
+		$form->setHideLabels();
+		//$form->setTarget("cld_blank_target");
+		$form->setFormAction($ilCtrl->getFormAction($this, "zip"));
+		$form->setTableWidth("100%");		
+
+		$set_scored = new ilCheckboxInputGUI($this->plugin->txt('ignore_empty'), 'ignoreEmpty');
+		$set_scored->setValue('set');
+		$set_scored->setChecked(true);
+		$form->addItem($set_scored);
+
+		$passOverride = new ilCheckboxInputGUI($this->plugin->txt('use_auto_file'), 'autoFileName');
+		$passOverride->setRequired(false);
+
+		$passOverride->setValue('ov');
+		$passOverride->setChecked(false);
+		$form->addItem($passOverride);
+
+		$form->addCommandButton('zip', $this->plugin->txt('lnk_solution_archive'));
+		return $form;
+	}
+
 	/**
 	 * Prepares Fileupload form and returns it.
 	 * @return ilPropertyFormGUI
@@ -137,6 +194,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 
 		$item = new ilCustomInputGUI($this->plugin->txt('archive_file'));
 		$item->setHTML('<input type="file" id="upload_files" name="upload_files">');
+		$item->setRequired(true);
 		$form->addItem($item);
 
 		$set_scored = new ilCheckboxInputGUI($lng->txt('set_manscoring_done'), 'set_manscoring_done');
@@ -225,13 +283,13 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$file = $_FILES['upload_files'];
 
 		if ($file['error'] != 0) {
-			ilUtil::sendFailure($this->uploadCodeToMessage($file['error']), true);
+			$this->sendFailure($this->uploadCodeToMessage($file['error']));
 			$this->redirectToIndex();
 			return;
 		}
 
 		if (!file_exists($file['tmp_name'])) {
-			ilUtil::sendFailure($lng->txt('file_not_found'), true);
+			$this->sendFailure($lng->txt('file_not_found'));
 			$this->redirectToIndex();
 			return;
 		}
@@ -348,6 +406,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$tpl->setVariable("LINK_LATEXZIP", $ilCtrl->getLinkTargetByClass(array('ilUIPluginRouterGUI', 'ilCodeQuestionScoreIntegrationPageGUI')) . '&cmd=latexZip');
 		//echo $this->getFileUploadFormHTML()."<hr>";die;
 		//$upload = $this->getFileUploadForm();
+		$tpl->setVariable("FILE_DOWNLOAD", $this->getFileDownloadForm()->getHTML());
 		$tpl->setVariable("FILE_UPLOAD", $this->getFileUploadForm()->getHTML());
 
 		$tpl->setVariable('TITLE', $this->plugin->txt('title'));
@@ -398,7 +457,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		global $ilAccess, $ilErr, $lng;
 
 		if (!$ilAccess->checkAccess('write', '', $this->testObj->getRefId())) {
-			ilUtil::sendFailure($lng->txt("permission_denied"), true);
+			$this->sendFailure($lng->txt("permission_denied"), true);
 			$this->redirectToIndex();
 		}
 
@@ -406,14 +465,16 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 			$zipFile = tempnam(sys_get_temp_dir(), 'Latex_') . ".zip";
 			$err = $this->estObj->buildLatexZIP($zipFile);
 		} else {
-			$zipFile = tempnam(sys_get_temp_dir(), 'EST_') . ".zip";
+			$zipFile = tempnam(sys_get_temp_dir(), 'TEST_ARCHIVE_') . ".zip";
 			$err = $this->estObj->buildZIP($zipFile);
 		}
 
 		if (!is_null($err)) {
-			ilUtil::sendFailure($err, true);
+			$this->sendFailure($err, true);
 			$this->redirectToIndex();
 		}
+
+		$this->debug("Built Code Archive: ". $zipFile);
 
 		$finfo = finfo_open(FILEINFO_MIME_TYPE);
 		header('Content-Type: ' . finfo_file($finfo, $zipFile));
@@ -430,7 +491,11 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		//Define file size
 		header('Content-Length: ' . filesize($zipFile));
 
-		ob_clean();
+		try {
+			ob_clean();
+		} catch (Exception $e) {
+			$this->debug("ob_clean failed: " . $e->getMessage());
+		}
 		flush();
 		readfile($zipFile);
 
@@ -438,7 +503,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		if (file_exists($zipFile)) {
 			unlink($zipFile);
 		}
-		ilUtil::sendSuccess($this->plugin->txt("download_created"), true);
+		$this->sendSuccess($this->plugin->txt("download_created"));
 		$this->redirectToIndex();
 		//die;		
 	}
