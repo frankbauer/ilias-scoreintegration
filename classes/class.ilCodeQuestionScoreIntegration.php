@@ -38,6 +38,18 @@ class ilCodeQuestionScoreIntegration {
 		$this->questioninfo = $DIC->testQuestionPool()->questionInfo();
 	}
 
+	private function log($message) {
+		global $DIC;
+		$ilLog = $DIC->logger()->root();
+		$ilLog->info($message);
+	}
+
+	private function debug($message) {
+		global $DIC;
+		$ilLog = $DIC->logger()->root();
+		$ilLog->debug($message);
+	}
+
 	public static function initPluginObject(string $plugin_name): ilPlugin|null {
 		global $DIC;
 		$ilLog = $DIC->logger()->root();
@@ -263,18 +275,33 @@ class ilCodeQuestionScoreIntegration {
 				"login" => trim($matches[7][0])
 			);
 			if (strtolower($obj["file"]) == 'comment') {
-				$obj['rawContent'] = $zip->getFromIndex($i);
-				preg_match_all('/.*\:\s*(-?[0-9]+(\.[0-9]+)?)\s*\n([\s\S]*)/', $obj['rawContent'], $matches);
-				//print_r($matches);
-				if (count($matches) != 4 || count($matches[0]) == 0) {
-					$result['invalidComment'][] = $obj;
-				} else if ($this->testObj->getID() != $obj['testID']) {
+	      $obj['rawContent'] = $zip->getFromIndex($i) ?? '';
+				$obj['rawContent'] = trim(str_replace("\r", "", $obj['rawContent']));
+				
+				preg_match_all('/.*\:\s*(-?[0-9]+([.,][0-9]+)?)\s*\n([\s\S]*)/', $obj['rawContent'], $matches);
+				//$this->log("matches: " . print_r($matches, true));
+				if ($this->testObj->getID() != $obj['testID']) {
 					$result['wrongTest'][] = $obj;
-				} else {
-					$obj['points'] = (float) $matches[1][0];
+				} else if (count($matches) != 4 || count($matches[0]) == 0) {		
+					
+					//check the first line for points		
+					$first_line = strtok($obj['rawContent'], "\n");
+					//$this->log("falback on first line: " . $first_line);	
+					preg_match_all('/\s*(?:POINTS|Points|points|score|SCORE|Score)\s*\:\s*(-?[0-9]+([.,][0-9]+)?)\s*/', $first_line, $matches);
+					//$this->log("fallback matches: " . print_r($matches, true));
+					if (count($matches) != 3 || count($matches[0]) == 0) {
+						$result['invalidComment'][] = $obj;						
+					} else {
+						$obj['points'] = (float) str_replace(',', '.', $matches[1][0]);
+						$obj['comment'] = '';
+						$obj['stored'] = false;
+					  $result['files'][] = $obj;
+					}
+				} else {					
+					$obj['points'] = (float) str_replace(',', '.', $matches[1][0]);
 					$obj['comment'] = '<pre style="font-family:monospace">' . trim($matches[3][0]) . '</pre>';
 					$obj['stored'] = false;
-					$result['files'][] = $obj;
+					$result['files'][] = $obj;					
 				}
 			} else {
 				$result['ignoredFiles'][] = $obj;
@@ -386,7 +413,7 @@ class ilCodeQuestionScoreIntegration {
 			return "cannot open <$tempBase>\n";
 		}
 
-		$tempBase = sprintf('./EST/test-%06d', $this->testObj->getId());
+		$tempBase = sprintf('./test-%06d', $this->testObj->getId());
 		$ignoreEmpty = $_POST['ignoreEmpty'] == 1;
 		$autoFileName = $_POST['autoFileName'] == 1;
 		foreach ($data->getParticipants() as $active_id => $userdata) {
@@ -513,13 +540,15 @@ class ilCodeQuestionScoreIntegration {
 						}
 					}
 
-					//dump a solution html rendering for the VSCode Extension {
+					//dump a solution html rendering for the VSCode Extension 
+					{
 						$solutions = $objQuestion->getSolutionValuesOrInit($active_id, $pass, true, false, false);
 						$html = $objQuestion->blocks()->ui()->render(false, false, true, $solution['value1'], $solution['value2']);
 						$zip->addFromString($subFolder . '/rendered.html', $html);
 					}
 
-					//add the question-text and other meta info to download {
+					//add the question-text and other meta info to download 
+					{
 						$info = ['title' => $objQuestion->getTitle(), 'hint' => $objQuestion->getComment(), 'description' => $objQuestion->getQuestion()];
 						$zip->addFromString($subFolder . '/meta.json', json_encode($info));
 					}
