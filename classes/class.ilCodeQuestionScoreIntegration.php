@@ -40,6 +40,29 @@ class ilCodeQuestionScoreIntegration
 		$this->questioninfo = $DIC->testQuestionPool()->questionInfo();
 	}
 
+	public static function initPluginObject(string $plugin_name): ilPlugin|null {
+		global $DIC;
+		$ilLog = $DIC->logger()->root();
+
+		try {
+			$component_repository = $DIC["component.repository"];
+			$component_factory = $DIC["component.factory"];
+			$info = $component_repository->getPluginByName($plugin_name);
+
+			$plugin_obj = $component_factory->getPlugin($info->getId());
+
+			if (!is_null($info) && $info->isActive()) {
+				return $plugin_obj;
+			} else {
+				throw new ilPluginException($plugin_name . ' plugin is not active');
+			}
+		} catch (ilPluginException $e) {
+			$ilLog->write("Error loading Plugin " . $plugin_name . ": " . $e->getMessage(), $ilLog->ERROR);
+		}
+
+		return null;
+	}
+
 // fred: new function logAction
 	function logAction($logtext = "", $question_id = "")
 	{

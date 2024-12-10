@@ -1,8 +1,6 @@
 <?php
 require_once ('Modules/Test/classes/class.ilObjTest.php');
-//require_once('Services/FileUpload/classes/class.ilFileUploadGUI.php');
 require_once 'Services/Form/classes/class.ilPropertyFormGUI.php';
-require_once 'ilCodeQuestionScoreIntegration.helper.php';
 /**
  * Extended Test Statistic Page GUI
  *
@@ -40,8 +38,7 @@ class ilCodeQuestionScoreIntegrationPageGUI
 
 		$lng->loadLanguageModule('assessment');
 
-		$this->plugin = ilCodeQuestionScoreIntegration_initPluginObject('CodeQuestionScoreIntegration');
-		//$this->plugin->includeClass('class.ilCodeQuestionScoreIntegration.php');
+		$this->plugin = ilCodeQuestionScoreIntegration::initPluginObject('CodeQuestionScoreIntegration');
 		$this->plugin->loadLanguageModule();
 
 		$this->testObj = new ilObjTest($_GET['ref_id']);
