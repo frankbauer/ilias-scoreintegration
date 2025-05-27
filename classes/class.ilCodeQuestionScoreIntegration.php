@@ -191,6 +191,7 @@ class ilCodeQuestionScoreIntegration
 				[$active_id, $pass]
 			);
 			$values['points'] = ['float', $result->fetchAssoc()['reachedpoints'] ?? 0.0];
+			
 			$ilDB->update(
 				'tst_pass_result',
 				$values,
@@ -261,7 +262,7 @@ class ilCodeQuestionScoreIntegration
 				}
 			}
 
-			$this->updateReachedPoints($active_id, $question_id, $old_points, $points, $maxpoints, $manual, $forcePoints);
+			$this->updateReachedPoints($active_id, $question_id, $old_points, $points, $maxpoints, $pass, $manual, $forcePoints);
 
 			if ($old_points != $points || !$rowsnum) {
 				return TRUE;
