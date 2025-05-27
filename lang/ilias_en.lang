@@ -39,3 +39,5 @@ ignore_empty#:#Ignore empty passes
 use_auto_file#:#Automatically find filename for Solution
 pass_override#:#Upload all results to last pass
 pass_override_label#:#Evaluated Pass
+force_points#:#Force Overwrite of existing Points (Dangerzone !!!).
+force_points_label#:#Overwrite Points

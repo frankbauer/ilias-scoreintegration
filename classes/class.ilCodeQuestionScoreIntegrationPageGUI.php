@@ -204,10 +204,15 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 
 		$passOverride = new ilCheckboxInputGUI($this->plugin->txt('pass_override'), 'pass_override');
 		$passOverride->setRequired(false);
-
 		$passOverride->setValue('ov');
 		$passOverride->setChecked(false);
 		$form->addItem($passOverride);
+
+		$forceWritePoints = new ilCheckboxInputGUI($this->plugin->txt('force_points'), 'force_points');
+		$forceWritePoints->setRequired(false);
+		$forceWritePoints->setValue('force');
+		$forceWritePoints->setChecked(false);
+		$form->addItem($forceWritePoints);
 
 		$form->addCommandButton('uploadFiles', $lng->txt('submit'));
 		return $form;
