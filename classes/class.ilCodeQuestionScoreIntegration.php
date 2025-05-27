@@ -206,7 +206,7 @@ class ilCodeQuestionScoreIntegration
 
 		ilCourseObjectiveResult::_updateObjectiveResult(ilObjTest::_getUserIdFromActiveId($active_id), $active_id, $question_id);
 		$this->testObj->updateTestResultCache($active_id);
-		die;
+		
 		if (ilObjAssessmentFolder::_enabledAssessmentLogging()) {
 			$msg = 'CodeQuestionScoreIntegration changed Points old=%f new=%f by %s';
 			$msg = sprintf(
