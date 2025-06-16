@@ -40,3 +40,4 @@ force_points#:#Force Overwrite of existing Points (Dangerzone !!!).
 force_points_label#:#Overwrite Points
 download_options#:#Archive Settings
 grading_options#:#Grading
+generate_log#:#Generate Log and add

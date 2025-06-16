@@ -9,6 +9,94 @@ include_once "./Modules/Test/classes/class.ilObjAssessmentFolder.php";
 // fred.
 
 /**
+ * Logger class for handling indented logging
+ */
+class ilCodeQuestionScoreLogger
+{
+    /** @var string[] Array of log lines */
+    private $lines = [];
+    
+    /** @var int[] Stack of indentation levels */
+    private $indentStack = [];
+    
+    /** @var string The indentation string to use */
+    private $indentString = "    "; // 4 spaces
+    
+    /** @var bool Whether logging is enabled */
+    private $enabled = true;
+    
+    /**
+     * Constructor
+     */
+    public function __construct()
+    {
+        $this->indentStack = [0]; // Start with no indentation
+    }
+    
+    /**
+     * Enable or disable logging
+     * @param bool $enabled Whether to enable logging
+     */
+    public function setEnabled($enabled)
+    {
+        $this->enabled = $enabled;
+    }
+    
+    /**
+     * Add a log line with current indentation
+     * @param string $message The message to log
+     */
+    public function add($message)
+    {
+        if (!$this->enabled) {
+            return;
+        }
+        
+        $currentIndent = end($this->indentStack);
+        $prefix = str_repeat($this->indentString, $currentIndent);
+        $this->lines[] = $prefix . $message;
+    }
+    
+    /**
+     * Push a new indentation level
+     * @param int $levels Number of levels to indent (default: 1)
+     */
+    public function pushIndent($levels = 1)
+    {
+        $currentIndent = end($this->indentStack);
+        $this->indentStack[] = $currentIndent + $levels;
+    }
+    
+    /**
+     * Pop the last indentation level
+     */
+    public function popIndent()
+    {
+        if (count($this->indentStack) > 1) {
+            array_pop($this->indentStack);
+        }
+    }
+    
+    /**
+     * Get the complete log as a string
+     * @return string The formatted log
+     */
+    public function getLog()
+    {
+        return implode("\n", $this->lines);
+    }
+    
+    /**
+     * Clear all log lines
+     */
+    public function clear()
+    {
+        $this->lines = [];
+        $this->indentStack = [0];
+    }
+}
+
+/**
  * Basic class for EST import/Export
  *
  * @author Frank Bauer <frank.bauer@fau.de>
@@ -440,35 +528,33 @@ class ilCodeQuestionScoreIntegration
 		return $objQuestion->blocks()->getRandomSet($rid);
 	}
 
-	function justAnswers($objQuestion, $solution, $trimall = false)
+	function justAnswers($logger, $objQuestion, $solution, $trim_all = false)
 	{
 		if (method_exists($objQuestion, 'getJustAnswers')) {
-			return $objQuestion->getJustAnswers($solution, $trimall);
+			try {
+				// This method is available in the new question types
+				return $objQuestion->getJustAnswers($solution, $trim_all);
+			} catch (Exception $e) {
+				// If it fails, we fallback to the old method
+				$logger->add("Error in getJustAnswers: " . $e->getMessage());	
+				//$logger->add(print_r($solution, true));			
+				return '';	
+			}			
 		}
-		$blocks = $objQuestion->blocks->getCombinedBlocks($solution['value2'], true, $solution['value1']);
-
-		$res = '';
-		for ($i = 0; $i < count($blocks); $i++) {
-			$t = $objQuestion->blocks[$i]->getType();
-			if ($t == assCodeQuestionBlockTypes::SolutionCode) {
-				if (isset($blocks[$i])) {
-					if ($trimall) {
-						$res .= trim($blocks[$i]) . "\n";
-					} else {
-						$res .= $blocks[$i] . "\n";
-					}
-				}
-			}
-		}
-		return $res;
+		$logger->add("getJustAnswers method not available in " . get_class($objQuestion). ". This is likely an outdated question Plugin.");
+		return '';
 	}
 
 	function buildZIP($zipFile)
 	{
+		// Initialize logger
+		$logger = new ilCodeQuestionScoreLogger();
+		
 		$data = $this->testObj->getCompleteEvaluationData(TRUE);
 
 		$zip = new ZipArchive();
 		if ($zip->open($zipFile, ZipArchive::CREATE) !== TRUE) {
+			$logger->add("ERROR: Cannot open ZIP file");
 			return "cannot open <$tempBase>\n";
 		}
 
@@ -476,29 +562,73 @@ class ilCodeQuestionScoreIntegration
 		$allOptions = $_POST['downloadOptions'] ?? [];
 		$ignoreEmpty = in_array('ignoreEmpty', $allOptions);
 		$autoFileName = in_array('autoFileName', $allOptions); 
+		$generateLog = in_array('generateLog', $allOptions);
+		
+		// Enable/disable logging based on generateLog option
+		$logger->setEnabled($generateLog);
+		
+		$logger->add("Starting ZIP build process");
+		$logger->add("ZIP file: " . $zipFile);
+		$logger->add("Options: ignoreEmpty=" . ($ignoreEmpty ? 'true' : 'false') . 
+		           ", autoFileName=" . ($autoFileName ? 'true' : 'false') . 
+		           ", generateLog=" . ($generateLog ? 'true' : 'false'));	
+		$logger->add("");	
+		$logger->add("Processing participants...");
+		$logger->pushIndent(); // Participant-Block indent
+		$participantCount = 0;
 
-
-		foreach ($data->getParticipants() as $active_id => $userdata) {
+		foreach ($data->getParticipants() as $active_id => $userdata) {			
+			$participantCount++;			
+			$logger->add("Participant #" . $participantCount . " (login: " . $userdata->login . ", active_id: " . $active_id . ")");
+			$logger->pushIndent(); // Participant-specific indent
 
 			// Do something with the participants				
 			$pass = $userdata->getScoredPass();
 			$opass = $pass;
 			$questions = $userdata->getQuestions($pass);
 
-			if (!is_array($questions))
+			if (!is_array($questions)) {
+				$logger->add("No questions found for this participant");
+				$logger->popIndent();
 				continue;
+			}
+			
+			$logger->add("Processing " . count($questions) . " questions");
+			$logger->pushIndent();  // Question-Block indent
+				
+			
 			foreach ($questions as $question) {
+				if ($question == NULL || !isset($question["id"])) {
+					$logger->add("Skipping question with missing ID");
+					continue;
+				}
+
 				$questionBase = $tempBase . '/' . sprintf("question-%06d", $question["id"]);
 				$objQuestion = NULL;
+				$logger->add("Preparing Question Data for ID: " . $question["id"]);
+				$logger->pushIndent();// question object indent
 				if (isset($question["id"]) && isset($questions[$question["id"]])) {
+					$logger->add("Reusing existing question object for ID: " . $question["id"]);
 					$objQuestion = $questions[$question["id"]];
 				}
 
 				if (!$objQuestion) {
+					$logger->add("Instantiating new question object for ID: " . $question["id"]);
 					$objQuestion = $this->testObj->_instanciateQuestion($question["id"]);
 					$questions[$question["id"]] = $objQuestion;
 				}
+
+				if (!$objQuestion) {
+					$logger->add("ERROR: Could not instantiate question object for ID: " . $question["id"]);
+					$logger->popIndent(); // question object indent
+					continue;
+				}
+				$logger->popIndent(); // question object indent
+				
+				$logger->add("Question ID: " . $question["id"] . " - Type: " . get_class($objQuestion));
+				$logger->pushIndent(); // Question-specific indent				
 				if (method_exists($objQuestion, 'getClozeText')) {
+					$logger->add("Processing Cloze Question");
 					$res = $this->jsonFromClozeQuestion($objQuestion, $active_id, $pass);
 					$subFolder = $this->createCommentFile(
 						$zip,
@@ -512,7 +642,9 @@ class ilCodeQuestionScoreIntegration
 
 					$zip->addFromString($subFolder . '/cloze.json', $res['input'] . '');
 					$zip->addFromString($subFolder . '/answer.json', $res['sol'] . '');
+					$logger->add("Added cloze.json and answer.json files");
 				} else if (method_exists($objQuestion, 'getOrderingElements')) {
+					$logger->add("Processing Horizontal Ordering Question");
 					$json = $this->jsonFromHorizOrderingQuestion($objQuestion, $active_id, $pass);
 					$subFolder = $this->createCommentFile(
 						$zip,
@@ -525,7 +657,9 @@ class ilCodeQuestionScoreIntegration
 					);
 
 					$zip->addFromString($subFolder . '/order.json', $json . '');
+					$logger->add("Added order.json file for horizontal ordering");
 				} else if (method_exists($objQuestion, 'getOrderingElementList')) {
+					$logger->add("Processing Ordering Question");
 					$json = $this->jsonFromOrderingQuestion($objQuestion, $active_id, $pass);
 
 					$subFolder = $this->createCommentFile(
@@ -539,11 +673,13 @@ class ilCodeQuestionScoreIntegration
 					);
 
 					$zip->addFromString($subFolder . '/order.json', $json . '');
+					$logger->add("Added order.json file for ordering");
 				} else if (
 					method_exists($objQuestion, 'getCompleteSource') &&
 					method_exists($objQuestion, 'getExportFilename') &&
 					method_exists($objQuestion, 'getExportSolution')
 				) {
+					$logger->add("Processing Code Question");
 
 					$base_filename = $autoFileName ? $objQuestion->getExportFilename(NULL) : ("Solution." . $objQuestion->getExportExtension());
 
@@ -551,16 +687,23 @@ class ilCodeQuestionScoreIntegration
 					$osolution = $solution;
 
 					//ignore invalid solution
-					if ($solution == null)
+					if ($solution == null) {
+						$logger->add("No solution found - skipping");
+						$logger->popIndent();
 						continue;
+					}									
 
 					if ($ignoreEmpty) {
-						$rerun = true;
+						$logger->add("Checking for empty solutions (ignoreEmpty enabled) in pass " . $pass);						
+						$logger->pushIndent();						
+
+						$rerun = true;						
 						while ($pass > 0 && $rerun) {
-							$studentCode = trim($this->justAnswers($objQuestion, $solution, true));
-							$emptyCode = trim($this->justAnswers($objQuestion, NULL, true));
+							$studentCode = trim($this->justAnswers($logger, $objQuestion, $solution, true));
+							$emptyCode = trim($this->justAnswers($logger, $objQuestion, NULL, true));
 							//echo ":".$studentCode." ".$pass.":<br>:".$emptyCode.":<br>";                                
 							if (($studentCode == $emptyCode || $studentCode == '') && $pass > 0) {
+								$logger->add("Pass " . $pass . " has empty solution, checking previous pass");
 								$pass--;
 								$solution = $objQuestion->getExportSolution($active_id, $pass);
 								if ($solution == null) {
@@ -568,16 +711,30 @@ class ilCodeQuestionScoreIntegration
 								}
 							} else {
 								$rerun = false;
+								$logger->add("Found non-empty solution at pass " . $pass);
+								$logger->pushIndent();
+								//$logger->add("Student Code: " . $studentCode);
+								//$logger->add("Empty Code: " . $emptyCode);
+								$logger->popIndent();
 							}
 						}
+						if ($pass <= 0) $logger->add("This is the first pass, no previous passes to check. The Solution will be used as is.");
+
+						$logger->popIndent();
 					}
 
 					$filename = $autoFileName ? $objQuestion->getExportFilename($solution) : ("Solution." . $objQuestion->getExportExtension());
 					// echo $filename ." - ".$opass . " - " .$pass;
 					// die;					
 
-					if (!isset($solution["solution_id"]))
+					if (!isset($solution["solution_id"])) {
+						$logger->add("No solution_id found - skipping");
+						$logger->popIndent();
 						continue;
+					}
+
+					$logger->add("Processing solution with filename: " . $filename);
+					$logger->pushIndent();
 
 					$code = CodeBlock::fixExportedCode($objQuestion->getCompleteSource($solution));
 					$blocks = $objQuestion->blocks()->getCombinedBlocks($solution['value2'], true, $solution['value1']);
@@ -591,45 +748,75 @@ class ilCodeQuestionScoreIntegration
 						$pass,
 						$solution
 					);
-
+					$logger->add("Subfolder for question: " . $subFolder);
 					$zip->addFromString($subFolder . '/' . $filename, $code);
+					$logger->add("Added main solution file: " . $filename);
 
 					//we have the randomizer, so dump its values
 					if ($objQuestion->blocks()->getRandomizerActive()) {
+						$logger->add("Processing randomizer data");
 						$set = $this->getRandomSet($objQuestion, $active_id, $pass);
 						if ($set != NULL) {
 							$zip->addFromString($subFolder . '/randomizer.json', json_encode($set));
+							$logger->add("Added randomizer.json");
+						} else {
+							$logger->add("No randomizer data found - skipping");
 						}
 					}
 
 					//dump a solution html rendering for the VSCode Extension 
 					{
+						$logger->add("Generating rendered HTML (rendered.html)");
 						$solutions = $objQuestion->getSolutionValuesOrInit($active_id, $pass, true, false, false);
 						$html = $objQuestion->blocks()->ui()->render(false, false, true, $solution['value1'], $solution['value2']);
-						$zip->addFromString($subFolder . '/rendered.html', $html);
+						$zip->addFromString($subFolder . '/rendered.html', $html);						
 					}
 
 					//add the question-text and other meta info to download 
 					{
+						$logger->add("Adding meta information (meta.json)");
 						$info = ['title' => $objQuestion->getTitle(), 'hint' => $objQuestion->getComment(), 'description' => $objQuestion->getQuestion()];
-						$zip->addFromString($subFolder . '/meta.json', json_encode($info));
+						$zip->addFromString($subFolder . '/meta.json', json_encode($info));						
 					}
 
 					//generate files for each block
+					$logger->add("Processing " . count($blocks) . " code blocks");
+					$logger->pushIndent();
 					for ($i = 0; $i < count($blocks); $i++) {
 						$t = $objQuestion->blocks()[$i]->getType();
 						if ($t == assCodeQuestionBlockTypes::SolutionCode) {
 							$zip->addFromString($subFolder . '/' . $i . '.solution.' . $base_filename, CodeBlock::fixExportedCode($blocks[$i]));
+							$logger->add("Block " . $i . ": Added solution code block");
 						} else if ($t == assCodeQuestionBlockTypes::StaticCode) {
 							$zip->addFromString($subFolder . '/' . $i . '.static.' . $base_filename, CodeBlock::fixExportedCode($blocks[$i]));
+							$logger->add("Block " . $i . ": Added static code block");
 						} else if ($t == assCodeQuestionBlockTypes::HiddenCode) {
 							$zip->addFromString($subFolder . '/' . $i . '.hidden.' . $base_filename, CodeBlock::fixExportedCode($blocks[$i]));
+							$logger->add("Block " . $i . ": Added hidden code block");
+						} else {
+							$logger->add("Block " . $i . ": Unknown block type '" . $t . "' - skipping");
 						}
 					}
+					$logger->popIndent();
+					$logger->popIndent();
 				}
+				$logger->popIndent(); // Question-specific indent 
 			}
+			$logger->popIndent(); // Question-Block indent
+			$logger->popIndent(); // Participant-specific indent
 			// Access some user related properties
 			//$last_visited = $data->getParticipant($active_id)->getLastVisit();
+		}		
+		$logger->popIndent(); // Participant-Block indent
+		$logger->add("");
+		$logger->add("ZIP build completed successfully");
+		$logger->add("Processed " . $participantCount . " participants");
+		
+		// If generateLog option is enabled, add the log to the ZIP in the test folder
+		if ($generateLog) {
+			$logContent = $logger->getLog();
+			//print_r("<pre>".$logContent."</pre>");die;
+			$zip->addFromString($tempBase . '/build_log.txt', $logContent);			
 		}
 
 		$zip->close();

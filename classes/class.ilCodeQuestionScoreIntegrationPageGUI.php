@@ -165,6 +165,13 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$passOverride->setChecked(false);
 		$options->addOption($passOverride);
 
+		$generate_log = new ilCheckboxInputGUI($this->plugin->txt('generate_log'), 'generateLog');
+		$generate_log->setValue('generateLog');		
+		$passOverride->setChecked(true);
+		$options->addOption($generate_log);
+
+		$options->setValue(['ignoreEmpty', 'generateLog']);
+
 		$form->addItem($options);
 
 		$form->addCommandButton('zip', $this->plugin->txt('lnk_solution_archive'));
@@ -212,6 +219,8 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$forceWritePoints->setValue('force_points');
 		$forceWritePoints->setChecked(false);
 		$gradingOptions->addOption($forceWritePoints);
+
+		$gradingOptions->setValue(['set_manscoring_done']);
 
 		$form->addItem($gradingOptions);
 
@@ -497,8 +506,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 			unlink($zipFile);
 		}
 		$this->sendSuccess($this->plugin->txt("download_created"));
-		$this->redirectToIndex();
-		//die;		
+		$this->redirectToIndex();		
 	}
 }
 ?>
