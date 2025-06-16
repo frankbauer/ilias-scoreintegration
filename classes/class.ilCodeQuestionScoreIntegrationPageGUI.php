@@ -150,22 +150,22 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 
 		$form = new ilPropertyFormGUI();
 		$form->setId("download");
-		$form->setHideLabels();
-		//$form->setTarget("cld_blank_target");
-		$form->setFormAction($ilCtrl->getFormAction($this, "zip"));
-		$form->setTableWidth("100%");		
+		$form->setFormAction($ilCtrl->getFormAction($this, "zip"));			
+
+		$options = new ilCheckboxGroupInputGUI($this->plugin->txt('download_options'), 'downloadOptions');
 
 		$set_scored = new ilCheckboxInputGUI($this->plugin->txt('ignore_empty'), 'ignoreEmpty');
-		$set_scored->setValue('set');
+		$set_scored->setValue('ignoreEmpty');
 		$set_scored->setChecked(true);
-		$form->addItem($set_scored);
+		$options->addOption($set_scored);
 
 		$passOverride = new ilCheckboxInputGUI($this->plugin->txt('use_auto_file'), 'autoFileName');
 		$passOverride->setRequired(false);
-
-		$passOverride->setValue('ov');
+		$passOverride->setValue('autoFileName');
 		$passOverride->setChecked(false);
-		$form->addItem($passOverride);
+		$options->addOption($passOverride);
+
+		$form->addItem($options);
 
 		$form->addCommandButton('zip', $this->plugin->txt('lnk_solution_archive'));
 		return $form;

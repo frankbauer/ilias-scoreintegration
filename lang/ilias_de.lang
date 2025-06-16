@@ -38,3 +38,4 @@ pass_override#:#Ergebnisse immer in den letzten Durchgang einfügen.
 pass_override_label#:#Korrigierter Durchgang
 force_points#:#Alle bestehenden Punkte Überschreiben. (Gefahrenzone !!!)
 force_points_label#:#Punkte Überschreiben
+download_options#:#Optionen

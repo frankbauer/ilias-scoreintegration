@@ -471,8 +471,11 @@ class ilCodeQuestionScoreIntegration
 		}
 
 		$tempBase = sprintf('./test-%06d', $this->testObj->getId());
-		$ignoreEmpty = $_POST['ignoreEmpty'] == 1;
-		$autoFileName = $_POST['autoFileName'] == 1;
+		$allOptions = $_POST['downloadOptions'] ?? [];
+		$ignoreEmpty = in_array('ignoreEmpty', $allOptions);
+		$autoFileName = in_array('autoFileName', $allOptions); 
+
+
 		foreach ($data->getParticipants() as $active_id => $userdata) {
 
 			// Do something with the participants				
