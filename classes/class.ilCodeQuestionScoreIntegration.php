@@ -799,49 +799,6 @@ class ilCodeQuestionScoreIntegration
 		return 0;
 	}
 
-	function buildLatexZIP($zipFile)
-	{
-		$data = $this->testObj->getCompleteEvaluationData(TRUE);
-		$testString = sprintf("test-%06d", $this->testObj->getId());
-		$tempBase = sprintf('./Latex-Export/%s', $testString);
-
-		$zip = new ZipArchive();
-		if ($zip->open($zipFile, ZipArchive::CREATE) !== TRUE) {
-			return "cannot open <$tempBase>\n";
-		}
-
-		foreach ($data->getParticipants() as $active_id => $userdata) {
-			// Do something with the participants				
-			$pass = $userdata->getScoredPass();
-			$usrInfo = $this->getParticipantInfo($active_id);
-			$stringP = $this->initParticipantString($usrInfo, $testString);
-
-			foreach ($userdata->getQuestions($pass) as $question) {
-				$objQuestion = $questions[$question["id"]];
-				if (!$objQuestion) {
-					$objQuestion = $this->testObj->_instanciateQuestion($question["id"]);
-					$questions[$question["id"]] = $objQuestion;
-				}
-				if (
-					method_exists($objQuestion, 'getCompleteSource') &&
-					method_exists($objQuestion, 'getExportSolution')
-				) {
-
-					$solution = $objQuestion->getExportSolution($active_id, $pass);
-					$code = $this->buildCode($objQuestion, $solution);
-					$questionString = sprintf("question-%06d", $question["id"]);
-					$stringP = $this->addQuestionToString($stringP, $questionString, $code);
-					$stringP = $this->addTestResultToString($stringP, $solution);
-				}
-			}
-			$stringP = $this->finishParticipantString($stringP);
-			$file = $tempBase . sprintf("/%s.tex", $usrInfo . '');
-			$zip->addFromString($file, $stringP);
-		}
-		$zip->close();
-
-		return NULL;
-	}
 	protected function buildCode($objQuestion, $solution)
 	{
 		$blocks = $objQuestion->blocks()->getCombinedBlocks($solution['value2'], true, $solution['value1']);

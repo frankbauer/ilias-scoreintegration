@@ -98,10 +98,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 				$this->tpl->printToStdout();
 				break;
 			case 'zip':
-				$this->sendZIP(FALSE);
-				break;
-			case 'latexZip':
-				$this->sendZIP(TRUE);
+				$this->sendZIP();
 				break;
 			default:
 			  $this->sendFailure($lng->txt("permission_denied"), true);
@@ -408,7 +405,6 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$tpl = $this->plugin->getTemplate('tpl.il_ui_uihk_uicodequestionscore_main_page.html');
 		$tpl->setVariable("PARTICIPANT_COUNT", count($data->getParticipants()));
 		$tpl->setVariable("LINK_ZIP", $ilCtrl->getLinkTargetByClass(array('ilUIPluginRouterGUI', 'ilCodeQuestionScoreIntegrationPageGUI')) . '&cmd=zip');
-		$tpl->setVariable("LINK_LATEXZIP", $ilCtrl->getLinkTargetByClass(array('ilUIPluginRouterGUI', 'ilCodeQuestionScoreIntegrationPageGUI')) . '&cmd=latexZip');
 		//echo $this->getFileUploadFormHTML()."<hr>";die;
 		//$upload = $this->getFileUploadForm();
 		$tpl->setVariable("FILE_DOWNLOAD", $this->getFileDownloadForm()->getHTML());
@@ -419,9 +415,6 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$tpl->setVariable('H_ARCH', $this->plugin->txt('h_solution_archive'));
 		$tpl->setVariable('TXT_ARCH', $this->plugin->txt('html_solution_archive'));
 		$tpl->setVariable('DNL_ARCH', $this->plugin->txt('lnk_solution_archive'));
-		$tpl->setVariable('H_TEX', $this->plugin->txt('h_tex'));
-		$tpl->setVariable('TXT_TEX', $this->plugin->txt('html_tex'));
-		$tpl->setVariable('DNL_TEX', $this->plugin->txt('lnk_tex'));
 		$tpl->setVariable('H_UPLOAD', $this->plugin->txt('h_upload'));
 		$tpl->setVariable('TXT_UPLOAD', $this->plugin->txt('html_upload'));
 		$tpl->setVariable('IGNORE_EMPTY_TEXT', $this->plugin->txt('ignore_empty'));
@@ -456,7 +449,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		return true;
 	}
 
-	function sendZIP($latex) {
+	function sendZIP() {
 		/** @var ilAccessHandler $ilAccess */
 		/** @var ilErrorHandling $ilErr */
 		global $ilAccess, $ilErr, $lng;
@@ -466,13 +459,8 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 			$this->redirectToIndex();
 		}
 
-		if ($latex) {
-			$zipFile = tempnam(sys_get_temp_dir(), 'Latex_') . ".zip";
-			$err = $this->estObj->buildLatexZIP($zipFile);
-		} else {
-			$zipFile = tempnam(sys_get_temp_dir(), 'TEST_ARCHIVE_') . ".zip";
-			$err = $this->estObj->buildZIP($zipFile);
-		}
+		$zipFile = tempnam(sys_get_temp_dir(), 'TEST_ARCHIVE_') . ".zip";
+		$err = $this->estObj->buildZIP($zipFile);
 
 		if (!is_null($err)) {
 			$this->sendFailure($err, true);

@@ -26,9 +26,6 @@ h_stored#:#Stored Records
 h_solution_archive#:#Solution-Archive
 html_solution_archive#:#Generate an archive containing all Source-Code Questions of this Test. The Archive contains a <em>_comment</em>-File that includes the currently stored score and comment. If you want to batch-override that data with an import below, you need to create a <em>comment</em> with the new content.
 lnk_solution_archive#:#Download Archive
-h_tex#:#Latex Zip
-html_tex#:#Generate an Latex-Formated export containing all Source-Code Questions of this Test.
-lnk_tex#:#Download Latex-Export
 h_upload#:#Upload Solution-Archive
 html_upload#:#Upload a solution-archive and read the results from the included <em>comment</em>-files.
 title#:#Auto Score Integration
