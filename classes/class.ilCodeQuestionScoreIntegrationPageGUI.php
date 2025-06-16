@@ -404,7 +404,6 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 
 		$tpl = $this->plugin->getTemplate('tpl.il_ui_uihk_uicodequestionscore_main_page.html');
 		$tpl->setVariable("PARTICIPANT_COUNT", count($data->getParticipants()));
-		$tpl->setVariable("LINK_ZIP", $ilCtrl->getLinkTargetByClass(array('ilUIPluginRouterGUI', 'ilCodeQuestionScoreIntegrationPageGUI')) . '&cmd=zip');
 		//echo $this->getFileUploadFormHTML()."<hr>";die;
 		//$upload = $this->getFileUploadForm();
 		$tpl->setVariable("FILE_DOWNLOAD", $this->getFileDownloadForm()->getHTML());
@@ -414,11 +413,8 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$tpl->setVariable('P_COUNT', $this->plugin->txt('h_nr_participants'));
 		$tpl->setVariable('H_ARCH', $this->plugin->txt('h_solution_archive'));
 		$tpl->setVariable('TXT_ARCH', $this->plugin->txt('html_solution_archive'));
-		$tpl->setVariable('DNL_ARCH', $this->plugin->txt('lnk_solution_archive'));
 		$tpl->setVariable('H_UPLOAD', $this->plugin->txt('h_upload'));
 		$tpl->setVariable('TXT_UPLOAD', $this->plugin->txt('html_upload'));
-		$tpl->setVariable('IGNORE_EMPTY_TEXT', $this->plugin->txt('ignore_empty'));
-		$tpl->setVariable('USE_AUTO_FILE', $this->plugin->txt('use_auto_file'));
 		return $tpl;
 	}
 
@@ -452,7 +448,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 	function sendZIP() {
 		/** @var ilAccessHandler $ilAccess */
 		/** @var ilErrorHandling $ilErr */
-		global $ilAccess, $ilErr, $lng;
+		global $ilAccess, $ilErr, $lng;		
 
 		if (!$ilAccess->checkAccess('write', '', $this->testObj->getRefId())) {
 			$this->sendFailure($lng->txt("permission_denied"), true);
