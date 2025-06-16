@@ -170,11 +170,12 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$passOverride->setChecked(true);
 		$options->addOption($generate_log);
 
-		$options->setValue(['ignoreEmpty', 'generateLog']);
+		$options->setValue(['ignoreEmpty']);
 
 		$form->addItem($options);
 
 		$form->addCommandButton('zip', $this->plugin->txt('lnk_solution_archive'));
+		$form->setPreventDoubleSubmission(false);
 		return $form;
 	}
 
@@ -498,15 +499,16 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		} catch (Exception $e) {
 			$this->debug("ob_clean failed: " . $e->getMessage());
 		}
+		
 		flush();
 		readfile($zipFile);
 
 		//cleanup
 		if (file_exists($zipFile)) {
-			unlink($zipFile);
+				unlink($zipFile);
 		}
-		$this->sendSuccess($this->plugin->txt("download_created"));
-		$this->redirectToIndex();		
+		// After sending the file, exit to prevent further output or redirects
+		exit;
 	}
 }
 ?>
