@@ -194,22 +194,26 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$item->setRequired(true);
 		$form->addItem($item);
 
+		$gradingOptions = new ilCheckboxGroupInputGUI($this->plugin->txt('grading_options'), 'gradingOptions');
+
 		$set_scored = new ilCheckboxInputGUI($lng->txt('set_manscoring_done'), 'set_manscoring_done');
-		$set_scored->setValue('set');
+		$set_scored->setValue('set_manscoring_done');
 		$set_scored->setChecked(true);
-		$form->addItem($set_scored);
+		$gradingOptions->addOption($set_scored);
 
 		$passOverride = new ilCheckboxInputGUI($this->plugin->txt('pass_override'), 'pass_override');
 		$passOverride->setRequired(false);
-		$passOverride->setValue('ov');
+		$passOverride->setValue('pass_override');
 		$passOverride->setChecked(false);
-		$form->addItem($passOverride);
+		$gradingOptions->addOption($passOverride);
 
 		$forceWritePoints = new ilCheckboxInputGUI($this->plugin->txt('force_points'), 'force_points');
 		$forceWritePoints->setRequired(false);
-		$forceWritePoints->setValue('force');
+		$forceWritePoints->setValue('force_points');
 		$forceWritePoints->setChecked(false);
-		$form->addItem($forceWritePoints);
+		$gradingOptions->addOption($forceWritePoints);
+
+		$form->addItem($gradingOptions);
 
 		$form->addCommandButton('uploadFiles', $lng->txt('submit'));
 		return $form;

@@ -100,7 +100,8 @@ class ilCodeQuestionScoreIntegration
 	function updatePoints($active_fi, $question_fi, $pass, $reachedPoints, $maxPoints, $comment = NULL, $forcePoints = false)
 	{
 		global $ilDB;
-		$setManScoringDone = $_POST['set_manscoring_done'] == 'set';
+		$gradingOptions = $_POST['gradingOptions'] ?? [];
+		$setManScoringDone = in_array('set_manscoring_done', $gradingOptions);
 
 		$this->setReachedPointsOnly(
 			$active_fi,
@@ -376,8 +377,9 @@ class ilCodeQuestionScoreIntegration
 	private function storeInfo(&$zipResults)
 	{
 		global $lng;
-		$passOverride = $_POST['pass_override'] == 'ov';
-		$forcePoints = $_POST['force_points'] == 'force';
+		$gradingOptions = $_POST['gradingOptions'] ?? [];
+		$passOverride = in_array('pass_override', $gradingOptions);
+		$forcePoints = in_array('force_points', $gradingOptions);
 		$data = [];
 		if ($passOverride) {
 			$data = $this->testObj->getCompleteEvaluationData(TRUE);
