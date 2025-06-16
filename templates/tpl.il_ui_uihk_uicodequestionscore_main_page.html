@@ -16,3 +16,57 @@
     
     {FILE_UPLOAD}
 </div>
+
+<script>
+    // Find the ZIP download button
+    var zipButton = document.querySelector('input[name="cmd[zip]"]');
+    
+    if (zipButton) {
+        zipButton.addEventListener('click', function() {
+            // Create and show toast notification
+            showZipNotification();
+        });
+    }
+
+
+function showZipNotification() {
+    // Create a toast-like notification
+    var notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed; 
+        top: 20px; 
+        right: 20px; 
+        background: #5cb85c; 
+        color: white; 
+        padding: 15px 20px; 
+        border-radius: 6px; 
+        z-index: 9999; 
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+    `;
+    
+    // Use the localized message from the template variable
+    var notificationText = '{ZIP_NOTIFICATION_MESSAGE}';
+    
+    notification.textContent = notificationText;
+    document.body.appendChild(notification);
+    
+    // Fade in
+    setTimeout(function() {
+        notification.style.opacity = '1';
+    }, 10);
+    
+    // Fade out and remove after 4 seconds
+    setTimeout(function() {
+        notification.style.opacity = '0';
+        setTimeout(function() {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 4000);
+}
+</script>

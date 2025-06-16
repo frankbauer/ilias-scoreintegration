@@ -41,3 +41,4 @@ force_points_label#:#Overwrite Points
 download_options#:#Archive Settings
 grading_options#:#Grading
 generate_log#:#Generate Log and add
+zip_generation_started#:#Archive generation started. The download will begin shortly.

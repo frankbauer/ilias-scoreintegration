@@ -176,6 +176,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 
 		$form->addCommandButton('zip', $this->plugin->txt('lnk_solution_archive'));
 		$form->setPreventDoubleSubmission(false);
+		
 		return $form;
 	}
 
@@ -429,6 +430,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		$tpl->setVariable('TXT_ARCH', $this->plugin->txt('html_solution_archive'));
 		$tpl->setVariable('H_UPLOAD', $this->plugin->txt('h_upload'));
 		$tpl->setVariable('TXT_UPLOAD', $this->plugin->txt('html_upload'));
+		$tpl->setVariable('ZIP_NOTIFICATION_MESSAGE', $this->plugin->txt('zip_generation_started'));
 		return $tpl;
 	}
 
