@@ -1,7 +1,5 @@
 <?php
 
-include_once("./Services/UIComponent/classes/class.ilUserInterfaceHookPlugin.php");
- 
 /**
  * User interface plugin
  *

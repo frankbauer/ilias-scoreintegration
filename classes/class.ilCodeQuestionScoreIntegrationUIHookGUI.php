@@ -1,8 +1,5 @@
 <?php
 
-include_once("./Services/UIComponent/classes/class.ilUIHookPluginGUI.php");
-require_once('Modules/Test/classes/class.ilObjTest.php');
-
 /**
  * User interface hook class
  *
@@ -39,9 +36,22 @@ class ilCodeQuestionScoreIntegrationUIHookGUI extends ilUIHookPluginGUI {
 		return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
 	}
 
+	/**
+	 * GUI classes (lower case, as returned by ilCtrl::getCmdClass) that show the manual scoring of a test
+	 */
+	private function isManualScoringClass(?string $cmdClass): bool {
+		return in_array($cmdClass, array(
+			strtolower(\ILIAS\Test\Scoring\Manual\ConsecutiveScoringGUI::class),
+			'iltestscoringbyquestionsgui',
+			'iltestscoringgui'
+		));
+	}
+
 	function numberOfCodeQuestions() {
-		global $ilDB;
-		$oID = ilObject::_lookupObjId($_GET['ref_id']) + 0;
+		global $DIC;
+		$ilDB = $DIC->database();
+		$refId = (int) ($DIC->http()->request()->getQueryParams()['ref_id'] ?? 0);
+		$oID = (int) ilObject::_lookupObjId($refId);
 		$count = 0;
 
 		$query = "SELECT count(q.question_id) AS 'nr' FROM qpl_questions AS q LEFT JOIN qpl_qst_type AS t ON q.question_type_fi = t.question_type_id WHERE (t.type_tag = 'assCodeQuestion' OR t.type_tag = 'assOrderingHorizontal' OR t.type_tag = 'assOrderingQuestion')AND obj_fi = $oID";
@@ -62,12 +72,15 @@ class ilCodeQuestionScoreIntegrationUIHookGUI extends ilUIHookPluginGUI {
 	 * @param string $a_par array of parameters (depend on $a_comp and $a_part)
 	 */
 	function modifyGUI(string $a_comp, string $a_part, array $a_par = []): void {
-		global $ilCtrl, $ilTabs;
+		global $DIC;
 
 		switch ($a_part) {
 			// case 'tabs':
 			case 'sub_tabs':
-				if (in_array($ilCtrl->getCmdClass(), array('iltestscoringbyquestionsgui', 'iltestscoringgui'))) {
+				// only resolve the services here: modifyGUI is also called during init (e.g. init_style)
+				$ilCtrl = $DIC->ctrl();
+				$ilTabs = $a_par['tabs'] ?? $DIC->tabs();
+				if ($this->isManualScoringClass($ilCtrl->getCmdClass())) {
 					if (!$this->hasCodeQuestions) {
 						$this->hasCodeQuestions = $this->numberOfCodeQuestions() > 0;
 					}
@@ -85,17 +98,20 @@ class ilCodeQuestionScoreIntegrationUIHookGUI extends ilUIHookPluginGUI {
 					// save the tabs for reuse on the plugin pages
 					// (these do not have the test gui as parent)
 					// not nice, but effective
-					$_SESSION['CodeQuestionScoreIntegration']['TabTarget'] = $ilTabs->target;
-					$_SESSION['CodeQuestionScoreIntegration']['TabSubTarget'] = $ilTabs->sub_target;
+					ilSession::set('CodeQuestionScoreIntegration', array(
+						'TabTarget' => $ilTabs->target,
+						'TabSubTarget' => $ilTabs->sub_target
+					));
 				}
 
 				if ($ilCtrl->getCmdClass() == 'ilcodequestionscoreintegrationpagegui') {
 					// reuse the tabs that were saved from the test gui
-					if (isset($_SESSION['CodeQuestionScoreIntegration']['TabTarget'])) {
-						$ilTabs->target = $_SESSION['CodeQuestionScoreIntegration']['TabTarget'];
+					$saved = ilSession::get('CodeQuestionScoreIntegration');
+					if (is_array($saved) && isset($saved['TabTarget'])) {
+						$ilTabs->target = $saved['TabTarget'];
 					}
-					if (isset($_SESSION['CodeQuestionScoreIntegration']['TabSubTarget'])) {
-						$ilTabs->sub_target = $_SESSION['CodeQuestionScoreIntegration']['TabSubTarget'];
+					if (is_array($saved) && isset($saved['TabSubTarget'])) {
+						$ilTabs->sub_target = $saved['TabSubTarget'];
 					}
 
 					// this works because the tabs are rendered after the sub tabs

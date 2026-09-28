@@ -1,6 +1,4 @@
 <?php
-require_once('Modules/Test/classes/class.ilObjTest.php');
-require_once 'Services/Form/classes/class.ilPropertyFormGUI.php';
 /**
  * Extended Test Statistic Page GUI
  *
@@ -25,37 +23,40 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 	/** @var ilCodeQuestionScoreIntegration $estObj */
 	protected $estObj;
 
+	protected ilLanguage $lng;
+
 	/**
 	 * ilCodeQuestionScoreIntegrationPageGUI constructor.
 	 */
 	public function __construct() {
-		global $ilCtrl, $tpl, $lng;
+		global $DIC;
 
-		$this->ctrl = $ilCtrl;
-		$this->tpl = $tpl;
+		$this->ctrl = $DIC->ctrl();
+		$this->tpl = $DIC->ui()->mainTemplate();
+		$this->lng = $DIC->language();
 
-		$lng->loadLanguageModule('assessment');
+		$this->lng->loadLanguageModule('assessment');
 
 		$this->plugin = ilCodeQuestionScoreIntegration::initPluginObject('CodeQuestionScoreIntegration');
 		$this->plugin->loadLanguageModule();
 
-		$this->testObj = new ilObjTest($_GET['ref_id']);
+		$refId = (int) ($DIC->http()->request()->getQueryParams()['ref_id'] ?? 0);
+		$this->testObj = new ilObjTest($refId);
 		$this->estObj = new ilCodeQuestionScoreIntegration($this->testObj, $this->plugin);
 	}
 
 	private function redirectToIndex() {
 		$this->debug("Redirecting to index for test: " . $this->testObj->getRefId());
-		ilUtil::redirect('ilias.php?baseClass=iluipluginroutergui&cmdNode=14z:7k&cmdClass=ilCodeQuestionScoreIntegrationPageGUI&cmd=showMainAutoScorePage&ref_id=270' . $this->testObj->getRefId());
+		$this->ctrl->setParameterByClass(self::class, 'ref_id', $this->testObj->getRefId());
+		$this->ctrl->redirectByClass(array(ilUIPluginRouterGUI::class, self::class), 'showMainAutoScorePage');
 	}
 
-	private function sendFailure($message) {
-		global $DIC;
-		$DIC->ui()->mainTemplate()->setOnScreenMessage("failure", $message);
+	private function sendFailure($message, $keep = false) {
+		$this->tpl->setOnScreenMessage("failure", $message, $keep);
 	}
 
-	private function sendSuccess($message) {
-		global $DIC;
-		$DIC->ui()->mainTemplate()->setOnScreenMessage("success", $message);
+	private function sendSuccess($message, $keep = false) {
+		$this->tpl->setOnScreenMessage("success", $message, $keep);
 	}
 
 	private function log($message) {
@@ -75,14 +76,11 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 	 */
 	public function executeCommand() {
 
-		/** @var ilAccessHandler $ilAccess */
-		/** @var ilErrorHandling $ilErr */
-		global $ilAccess, $ilErr, $lng;
-		
+		global $DIC;
 
-		if (!$ilAccess->checkAccess('write', '', $this->testObj->getRefId())) {
-			$this->sendFailure($lng->txt("permission_denied"), true);
-			$this->redirectToIndex();
+		if (!$DIC->access()->checkAccess('write', '', $this->testObj->getRefId())) {
+			$this->sendFailure($this->lng->txt("permission_denied"), true);
+			$this->ctrl->redirectToURL(ilLink::_getLink($this->testObj->getRefId()));
 		}
 		$cmd = $this->ctrl->getCmd('showMainAutoScorePage');
 		$this->debug("Command: " . $cmd);
@@ -101,7 +99,7 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 				$this->sendZIP();
 				break;
 			default:
-			  $this->sendFailure($lng->txt("permission_denied"), true);
+			  $this->sendFailure($this->lng->txt("permission_denied"), true);
 				$this->redirectToIndex();
 				break;
 		}
@@ -143,10 +141,8 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 	 * @return ilPropertyFormGUI
 	 */
 	public function getFileDownloadForm() {
-		/**
-		 * @var $lng ilLanguage
-		 */
-		global $lng, $ilCtrl;
+		$lng = $this->lng;
+		$ilCtrl = $this->ctrl;
 
 		$form = new ilPropertyFormGUI();
 		$form->setId("download");
@@ -185,10 +181,8 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 	 * @return ilPropertyFormGUI
 	 */
 	public function getFileUploadForm() {
-		/**
-		 * @var $lng ilLanguage
-		 */
-		global $lng, $ilCtrl;
+		$lng = $this->lng;
+		$ilCtrl = $this->ctrl;
 
 		$form = new ilPropertyFormGUI();
 		$form->setId("upload");
@@ -261,52 +255,20 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 		return $message;
 	}
 
-	/**
-	 * Prepares Fileupload form and returns it.
-	 * @return ilPropertyFormGUI
-	 */
-	public function getDragAndDropFileUploadForm() {
-		/**
-		 * @var $lng ilLanguage
-		 */
-		global $lng, $ilCtrl;
-		include_once("./Services/Form/classes/class.ilDragDropFileInputGUI.php");
-		include_once("./Services/jQuery/classes/class.iljQueryUtil.php");
-		$form = new ilPropertyFormGUI();
-		$form->setId("upload");
-		$form->setMultipart(true);
-		$form->setHideLabels();
-		$form->setTarget("cld_blank_target");
-		$form->setFormAction($ilCtrl->getFormAction($this, "uploadFiles"));
-		$form->setTableWidth("100%");
-
-		$file_input = new ilDragDropFileInputGUI($lng->txt("cld_upload_files"), "upload_files");
-		$file_input->setPostVar('file_to_upload');
-		$file_input->setTitle($lng->txt('upload'));
-		$file_input->setSuffixes(array(".zip"));
-
-		$form->addItem($file_input);
-		$form->addCommandButton("uploadFiles", $lng->txt("upload"));
-		$form->addCommandButton("cancelAll", $lng->txt("cancel"));
-
-
-		return $form;
-	}
-
 	protected function uploadFiles() {
 		/*$form = $this->getDragAndDropFileUploadForm();			
 			if ($form->checkInput()){}*/
 		$tpl = $this->overviewTemplate();
-		$file = $_FILES['upload_files'];
+		$file = $_FILES['upload_files'] ?? array('error' => UPLOAD_ERR_NO_FILE);
 
 		if ($file['error'] != 0) {
-			$this->sendFailure($this->uploadCodeToMessage($file['error']));
+			$this->sendFailure($this->uploadCodeToMessage($file['error']), true);
 			$this->redirectToIndex();
 			return;
 		}
 
 		if (!file_exists($file['tmp_name'])) {
-			$this->sendFailure($lng->txt('file_not_found'));
+			$this->sendFailure($this->lng->txt('file_not_found'), true);
 			$this->redirectToIndex();
 			return;
 		}
@@ -412,10 +374,8 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 	}
 
 	protected function overviewTemplate() {
-		global $ilCtrl, $ilDB, $lng;
-
-		$data = $this->testObj->getCompleteEvaluationData(TRUE);
-		$ilCtrl->saveParameterByClass('ilCodeQuestionScoreIntegrationPageGUI', 'ref_id');
+		$data = $this->testObj->getCompleteEvaluationData();
+		$this->ctrl->saveParameterByClass('ilCodeQuestionScoreIntegrationPageGUI', 'ref_id');
 
 		$tpl = $this->plugin->getTemplate('tpl.il_ui_uihk_uicodequestionscore_main_page.html');
 		$tpl->setVariable("PARTICIPANT_COUNT", count($data->getParticipants()));
@@ -443,9 +403,10 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 	 * Prepare the test header, tabs etc.
 	 */
 	protected function prepareOutput() {
+		global $DIC;
 		/** @var ilLocatorGUI $ilLocator */
-		/** @var ilLanguage $lng */
-		global $ilLocator, $lng;
+		$ilLocator = $DIC['ilLocator'];
+		$lng = $this->lng;
 
 		$this->ctrl->setParameterByClass('ilObjTestGUI', 'ref_id', $this->testObj->getRefId());
 		$ilLocator->addRepositoryItems($this->testObj->getRefId());
@@ -462,13 +423,11 @@ class ilCodeQuestionScoreIntegrationPageGUI {
 	}
 
 	function sendZIP() {
-		/** @var ilAccessHandler $ilAccess */
-		/** @var ilErrorHandling $ilErr */
-		global $ilAccess, $ilErr, $lng;		
+		global $DIC;
 
-		if (!$ilAccess->checkAccess('write', '', $this->testObj->getRefId())) {
-			$this->sendFailure($lng->txt("permission_denied"), true);
-			$this->redirectToIndex();
+		if (!$DIC->access()->checkAccess('write', '', $this->testObj->getRefId())) {
+			$this->sendFailure($this->lng->txt("permission_denied"), true);
+			$this->ctrl->redirectToURL(ilLink::_getLink($this->testObj->getRefId()));
 		}
 
 		$zipFile = tempnam(sys_get_temp_dir(), 'TEST_ARCHIVE_') . ".zip";

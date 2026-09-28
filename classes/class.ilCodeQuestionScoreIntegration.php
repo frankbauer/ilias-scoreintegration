@@ -1,12 +1,10 @@
 <?php
 
-require_once './Modules/TestQuestionPool/classes/class.assQuestion.php';
-require_once './Modules/Test/classes/inc.AssessmentConstants.php';
-require_once './Modules/TestQuestionPool/interfaces/interface.ilObjQuestionScoringAdjustable.php';
-require_once './Modules/TestQuestionPool/interfaces/interface.ilObjFileHandlingQuestionType.php';
-// fred: added for logging
-include_once "./Modules/Test/classes/class.ilObjAssessmentFolder.php";
-// fred.
+use ILIAS\Test\TestDIC;
+use ILIAS\Test\Logging\TestLogger;
+use ILIAS\Test\Logging\TestScoringInteractionTypes;
+use ILIAS\Test\Logging\AdditionalInformationGenerator;
+use ILIAS\Test\Scoring\Manual\TestScoring;
 
 /**
  * Logger class for handling indented logging
@@ -111,9 +109,10 @@ class ilCodeQuestionScoreIntegration
 	/** @var ilCodeQuestionScoreIntegrationPlugin $plugin */
 	protected $plugin;
 
-	protected \ILIAS\TestQuestionPool\QuestionInfoService $questioninfo;
-
 	protected ilLanguage $lng;
+	protected ilDBInterface $db;
+	protected TestLogger $test_logger;
+	protected array $request_body;
 	protected string $initiator_name;
 	protected int $initiator_id;
 
@@ -125,14 +124,16 @@ class ilCodeQuestionScoreIntegration
 	 */
 	public function __construct($a_test_obj, $a_plugin)
 	{
-		global $lng, $DIC;
-		$lng->loadLanguageModule('assessment');
+		global $DIC;
+		$this->lng = $DIC->language();
+		$this->lng->loadLanguageModule('assessment');
 		$this->testObj = $a_test_obj;
 		$this->plugin = $a_plugin;
-		$this->questioninfo = $DIC->testQuestionPool()->questionInfo();
+		$this->db = $DIC->database();
+		$this->test_logger = TestDIC::dic()['logging.logger'];
+		$body = $DIC->http()->request()->getParsedBody();
+		$this->request_body = is_array($body) ? $body : array();
 
-
-		$this->lng = $DIC->language();
 		$this->initiator_name = $DIC->user()->getFullname() . " (" . $DIC->user()->getLogin() . ")";
 		$this->initiator_id = $DIC->user()->getId();
 	}
@@ -175,52 +176,49 @@ class ilCodeQuestionScoreIntegration
 		return null;
 	}
 
-	// fred: new function logAction
-	function logAction($logtext = "", $question_id = "")
+	/**
+	 * Writes a "question graded" entry to the test log (the ILIAS 11 replacement of the assessment log)
+	 */
+	protected function logScoring(int $active_id, int $question_id, float $points, ?string $feedback)
 	{
-		global $ilUser;
-		if (ilObjAssessmentFolder::_enabledAssessmentLogging()) {
-			ilObjAssessmentFolder::_addLog($ilUser->getId(), $this->testObj->getId(), $logtext, $question_id, NULL, TRUE, $this->testObj->getRefId());
+		if (!$this->test_logger->isLoggingEnabled()) {
+			return;
 		}
+		$this->test_logger->logScoringInteraction(
+			$this->test_logger->getInteractionFactory()->buildScoringInteraction(
+				$this->testObj->getRefId(),
+				$question_id,
+				$this->initiator_id,
+				ilObjTestAccess::_getParticipantId($active_id),
+				TestScoringInteractionTypes::QUESTION_GRADED,
+				[
+					AdditionalInformationGenerator::KEY_REACHED_POINTS => $points,
+					AdditionalInformationGenerator::KEY_FEEDBACK => $feedback ?? ''
+				]
+			)
+		);
 	}
-	// fred.
 
 	function updatePoints($active_fi, $question_fi, $pass, $reachedPoints, $maxPoints, $comment = NULL, $forcePoints = false)
 	{
-		global $ilDB;
-		$gradingOptions = $_POST['gradingOptions'] ?? [];
+		$gradingOptions = $this->request_body['gradingOptions'] ?? [];
 		$setManScoringDone = in_array('set_manscoring_done', $gradingOptions);
 
 		$this->setReachedPointsOnly(
-			$active_fi,
-			$question_fi,
-			$reachedPoints,
-			$maxPoints,
-			$pass,
-			1,
-			$this->testObj->areObligationsEnabled(),
+			(int) $active_fi,
+			(int) $question_fi,
+			(float) $reachedPoints,
+			(float) $maxPoints,
+			(int) $pass,
 			$forcePoints
 		);
 
-		global $ilUser;
-		$logtext = sprintf(
-			$this->plugin->txt('log_import_score'),
-			$ilUser->getFullname() . " (" . $ilUser->getLogin() . ")",
-			$reachedPoints,
-			ilObjTestAccess::_getParticipantData($active_fi),
-			$this->questioninfo->getQuestionTitle($question_fi) //assQuestion::_getQuestionTitle($question_fi)			
-		);
-
-		$this->logAction($logtext, $question_fi);
-		// fred.
-
+		$feedback = null;
 		if (!is_null($comment)) {
-			include_once "./Services/AdvancedEditing/classes/class.ilObjAdvancedEditing.php";
-
 			$feedback = ilUtil::stripSlashes(
 				$comment,
 				false,
-				ilObjAdvancedEditing::_getUsedHTMLTagsAsString("assessment")
+				ilRTESettings::_getUsedHTMLTagsAsString("assessment")
 			);
 			$this->testObj->saveManualFeedback(
 				$active_fi,
@@ -230,143 +228,33 @@ class ilCodeQuestionScoreIntegration
 			);
 		}
 
+		$this->logScoring((int) $active_fi, (int) $question_fi, (float) $reachedPoints, $feedback);
+
 		if ($setManScoringDone) {
-			ilTestService::setManScoringDone($active_fi, true);
+			ilTestService::setManScoringDone((int) $active_fi, true);
 		}
 	}
 
 	/**
-	 * frank: Copied from ILIAS/Modules/Test/classes/class.ilTestScoring.php
-	 * 
-	 * This is an optimized version of \assQuestion::_setReachedPoints that only executes updates in the database if
-	 * necessary. In addition, unlike the original, this method does NOT update the test cache, so this must also be called
-	 * afterward.
-	 *
-	 * @see assQuestion::_setReachedPoints
+	 * Store the reached points of a learner (manual scoring) and update the attempt result.
+	 * With $forcePoints the attempt result is recalculated even if the points did not change.
 	 */
-	public function updateReachedPoints(int $active_id, int $question_id, float $old_points, float $points, float $max_points, int $pass, int $is_manual = 1, $forcePoints = false): void
+	protected function setReachedPointsOnly(int $active_id, int $question_id, float $points, float $maxpoints, int $pass, bool $forcePoints = false): bool
 	{
-		global $ilDB;
-
-		// Only update the test results if necessary
-		$has_changed = $old_points !== $points || $forcePoints;
-		if ($has_changed && $points <= $max_points) {
-			$ilDB->update(
-				'tst_test_result',
-				[
-					'points' => ['float', $points],
-					'tstamp' => ['integer', time()],
-					'manual' => ['integer', $is_manual]
-				],
-				[
-					'active_fi' => ['integer', $active_id],
-					'question_fi' => ['integer', $question_id],
-					'pass' => ['integer', $pass]
-				]
-			);
+		if ($points > $maxpoints) {
+			return false;
 		}
 
-		// Always update the pass result as the maximum points might have changed
-		$data = ilObjTest::_getQuestionCountAndPointsForPassOfParticipant($active_id, $pass);
-		$values = [
-			'maxpoints' => ['float', $data['points']],
-			'tstamp' => ['integer', time()],
-		];
-		
-		if ($has_changed) {
-			$result = $ilDB->queryF(
-				'SELECT SUM(points) reachedpoints FROM tst_test_result WHERE active_fi = %s AND pass = %s',
-				['integer', 'integer'],
-				[$active_id, $pass]
-			);
-			$values['points'] = ['float', $result->fetchAssoc()['reachedpoints'] ?? 0.0];
-			
-			$ilDB->update(
-				'tst_pass_result',
-				$values,
-				['active_fi' => ['integer', $active_id], 'pass' => ['integer', $pass]]
-			);
-		} else {
-			$ilDB->update(
-				'tst_pass_result',
-				$values,
-				['active_fi' => ['integer', $active_id], 'pass' => ['integer', $pass]]
-			);
+		assQuestion::_setReachedPoints($active_id, $question_id, $points, $maxpoints, $pass, true);
+		if ($forcePoints) {
+			TestDIC::dic()['results.data.repository']->updateTestAttemptResult($active_id, $pass);
 		}
-
-		ilCourseObjectiveResult::_updateObjectiveResult(ilObjTest::_getUserIdFromActiveId($active_id), $active_id, $question_id);
-		$this->testObj->updateTestResultCache($active_id);
-		
-		if (ilObjAssessmentFolder::_enabledAssessmentLogging()) {
-			$msg = 'CodeQuestionScoreIntegration changed Points old=%f new=%f by %s';
-			$msg = sprintf(
-				$msg,
-				$old_points,
-				$points,
-				$this->initiator_name
-			);
-			ilObjAssessmentFolder::_addLog(
-				$this->initiator_id,
-				$this->testObj->getId(),
-				$msg,
-				$question_id
-			);
-		}
+		return true;
 	}
-
-	// fred: copied from assQuestion and modified
-	/**
-	 * Only set the points, a learner has reached answering the question
-	 * Don't update the pass result or the the result cache
-	 *
-	 * @param integer $user_id The database ID of the learner
-	 * @param integer $test_id The database Id of the test containing the question
-	 * @param integer $points The points the user has reached answering the question
-	 * @return boolean true on success, otherwise false
-	 * @access public
-	 */
-	protected function setReachedPointsOnly($active_id, $question_id, $points, $maxpoints, $pass, $isManualScoring, $obligationsEnabled, $forcePoints = false)
-	{
-		global $ilDB;
-
-		if ($points <= $maxpoints) {
-			if (is_null($pass)) {
-				$pass = assQuestion::_getSolutionMaxPass($question_id, $active_id);
-			}
-
-			// retrieve the already given points
-			$old_points = -1;
-			$manual = ($isManualScoring) ? 1 : 0;
-			if (!$forcePoints) {
-				$result = $ilDB->queryF(
-					"SELECT points FROM tst_test_result WHERE active_fi = %s AND question_fi = %s AND pass = %s",
-					array('integer', 'integer', 'integer'),
-					array($active_id, $question_id, $pass)
-				);
-				
-				$rowsnum = $result->numRows();
-				if ($rowsnum) {
-					$row = $ilDB->fetchAssoc($result);
-					$old_points = $row["points"];
-				}
-			}
-
-			$this->updateReachedPoints($active_id, $question_id, $old_points, $points, $maxpoints, $pass, $manual, $forcePoints);
-
-			if ($old_points != $points || !$rowsnum) {
-				return TRUE;
-			}
-
-			return FALSE;
-		} else {
-			return FALSE;
-		}
-	}
-	// fred.
 
 	function processZipFile($zipFile)
 	{
-		global $ilDB;
+		global $DIC;
 
 		$zip = new ZipArchive();
 		$zip->open($zipFile);
@@ -385,6 +273,10 @@ class ilCodeQuestionScoreIntegration
 			$item = $zip->statIndex($i);
 
 			$filePath = trim($item['name']) . '';
+			// archives built by buildZIP (or re-zipped as-is) start with './'
+			while (substr($filePath, 0, 2) == './') {
+				$filePath = substr($filePath, 2);
+			}
 
 			if (substr($filePath, 0, 9) == '__MACOSX/') {
 				$result['metaFiles'][] = $item['name'];
@@ -451,26 +343,23 @@ class ilCodeQuestionScoreIntegration
 		$this->storeInfo($result);
 
 		//we may have to do this only once!
-		require_once './Modules/Test/classes/class.ilTestScoring.php';
-		$scorer = new ilTestScoring($this->testObj, $ilDB);
+		$scorer = new TestScoring($this->testObj, $DIC->user(), $this->db, TestDIC::dic()['results.data.repository']);
 		$scorer->setPreserveManualScores(true);
 		$scorer->recalculateSolutions();
 
-		$logtext = $this->plugin->txt('log_recalculated_solutions');
-		$this->logAction($logtext);
+		$this->log($this->plugin->txt('log_recalculated_solutions'));
 
 		return $result;
 	}
 
 	private function storeInfo(&$zipResults)
 	{
-		global $lng;
-		$gradingOptions = $_POST['gradingOptions'] ?? [];
+		$gradingOptions = $this->request_body['gradingOptions'] ?? [];
 		$passOverride = in_array('pass_override', $gradingOptions);
 		$forcePoints = in_array('force_points', $gradingOptions);
 		$data = [];
 		if ($passOverride) {
-			$data = $this->testObj->getCompleteEvaluationData(TRUE);
+			$data = $this->testObj->getCompleteEvaluationData();
 		}
 		$questions = [];
 		foreach ($zipResults['files'] as &$obj) {
@@ -506,7 +395,7 @@ class ilCodeQuestionScoreIntegration
 					$this->updatePoints($obj["activeID"], $obj["questionID"], $obj["pass"], $obj["points"], $objQuestion->getPoints(), $obj["comment"], $forcePoints);
 
 					if ($obj["pass"] != $pointPass) {
-						$cmt = '[' . $this->plugin->txt('pass_override_label') . ': ' . ($obj["pass"] + 1) . ']\n\n' . $obj["comment"];
+						$cmt = '[' . $this->plugin->txt('pass_override_label') . ': ' . ($obj["pass"] + 1) . "]\n\n" . $obj["comment"];
 						$this->updatePoints($obj["activeID"], $obj["questionID"], $pointPass, $obj["points"], $objQuestion->getPoints(), $cmt, $forcePoints);
 					}
 					$obj['stored'] = true;
@@ -550,16 +439,16 @@ class ilCodeQuestionScoreIntegration
 		// Initialize logger
 		$logger = new ilCodeQuestionScoreLogger();
 		
-		$data = $this->testObj->getCompleteEvaluationData(TRUE);
+		$data = $this->testObj->getCompleteEvaluationData();
 
 		$zip = new ZipArchive();
 		if ($zip->open($zipFile, ZipArchive::CREATE) !== TRUE) {
 			$logger->add("ERROR: Cannot open ZIP file");
-			return "cannot open <$tempBase>\n";
+			return "cannot open <$zipFile>\n";
 		}
 
 		$tempBase = sprintf('./test-%06d', $this->testObj->getId());
-		$allOptions = $_POST['downloadOptions'] ?? [];
+		$allOptions = $this->request_body['downloadOptions'] ?? [];
 		$ignoreEmpty = in_array('ignoreEmpty', $allOptions);
 		$autoFileName = in_array('autoFileName', $allOptions); 
 		$generateLog = in_array('generateLog', $allOptions);
@@ -579,7 +468,7 @@ class ilCodeQuestionScoreIntegration
 
 		foreach ($data->getParticipants() as $active_id => $userdata) {			
 			$participantCount++;			
-			$logger->add("Participant #" . $participantCount . " (login: " . $userdata->login . ", active_id: " . $active_id . ")");
+			$logger->add("Participant #" . $participantCount . " (login: " . $userdata->getLogin() . ", active_id: " . $active_id . ")");
 			$logger->pushIndent(); // Participant-specific indent
 
 			// Do something with the participants				
@@ -826,7 +715,6 @@ class ilCodeQuestionScoreIntegration
 
 	protected function getNumericValueFromText($text)
 	{
-		include_once("./Services/Math/classes/class.EvalMath.php");
 		$eval = new EvalMath();
 		$eval->suppress_errors = true;
 		return $eval->e(str_replace(",", ".", ilUtil::stripSlashes($text, false)));
@@ -847,13 +735,13 @@ class ilCodeQuestionScoreIntegration
 			$data['id'] = $i + 1;
 			foreach ($gap->getItemsRaw() as $nr => $item) {
 				$d = [];
-				$d['order'] = 0 + $item->getOrder();
-				$d['points'] = 0 + $item->getPoints();
+				$d['order'] = (int) $item->getOrder();
+				$d['points'] = (float) $item->getPoints();
 				$d['size'] = $item->getGapSize();
 				if ($data['type'] == 2) {
-					$d["lower"] = 0 + $item->getLowerBound();
-					$d["upper"] = 0 + $item->getUpperBound();
-					$d["value"] = 0 + $this->getNumericValueFromText($item->getAnswertext());
+					$d["lower"] = (float) $item->getLowerBound();
+					$d["upper"] = (float) $item->getUpperBound();
+					$d["value"] = (float) $this->getNumericValueFromText($item->getAnswertext());
 				} else {
 
 					$d['text'] = $item->getAnswertext();
@@ -938,7 +826,7 @@ class ilCodeQuestionScoreIntegration
 				$solution = $solution[count($solution) - 1];
 		}
 		if (!isset($solution) || !isset($solution['solution_id'])) {
-			return sprintf("empty-%06d-%06d-%06d-%s", $active_id, $pass, $userdata->user_id, $userdata->login);
+			return sprintf("empty-%06d-%06d-%06d-%s", $active_id, $pass, $userdata->getUserID(), $userdata->getLogin());
 		}
 
 		// print("createCommentFile<br>");
@@ -950,7 +838,7 @@ class ilCodeQuestionScoreIntegration
 		// print('pass: ' . $solution['pass'] . '<br>');
 		// print('user_id: ' . $userdata->user_id . '<br>');
 		// print('login: ' . $userdata->login . '<br>');
-		$subFolder = sprintf("solution-%06d-%06d-%06d-%06d-%s", $solution['solution_id'], $solution['active_fi'], $solution['pass'], $userdata->user_id, $userdata->login);
+		$subFolder = sprintf("solution-%06d-%06d-%06d-%06d-%s", $solution['solution_id'], $solution['active_fi'], $solution['pass'], $userdata->getUserID(), $userdata->getLogin());
 		$subFolder = $questionBase . '/' . preg_replace('/[^A-Za-z0-9_\-]/', '', $subFolder);
 
 		$feedback = $this->testObj->getManualFeedback(
@@ -973,7 +861,7 @@ class ilCodeQuestionScoreIntegration
 
 	protected function getReachedPoints($active_fi, $question_fi, $pass)
 	{
-		global $ilDB;
+		$ilDB = $this->db;
 
 		$query = "SELECT * FROM tst_test_result WHERE " .
 			'active_fi=' . $ilDB->quote($active_fi, 'integer') . " AND " .
@@ -1106,7 +994,7 @@ class ilCodeQuestionScoreIntegration
 
 	protected function getParticipantInfo($active_fi)
 	{
-		global $ilDB;
+		$ilDB = $this->db;
 
 		$query = "SELECT lastname, firstname, login, matriculation " .
 			"FROM tst_active, usr_data " .
