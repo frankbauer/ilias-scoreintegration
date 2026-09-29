@@ -37,14 +37,20 @@ class ilCodeQuestionScoreIntegrationUIHookGUI extends ilUIHookPluginGUI {
 	}
 
 	/**
-	 * GUI classes (lower case, as returned by ilCtrl::getCmdClass) that show the manual scoring of a test
+	 * Is the manual scoring of a test shown? ILIAS >= 10 renders it in ConsecutiveScoringGUI, which
+	 * activates the "manscoring" tab (ilCtrl still reports ilObjTestGUI as command class there).
+	 * The class names are the manual scoring pages of ILIAS <= 9.
 	 */
-	private function isManualScoringClass(?string $cmdClass): bool {
-		return in_array($cmdClass, array(
-			strtolower(\ILIAS\Test\Scoring\Manual\ConsecutiveScoringGUI::class),
-			'iltestscoringbyquestionsgui',
-			'iltestscoringgui'
-		));
+	private function isManualScoringPage(?string $cmdClass, ilTabsGUI $tabs): bool {
+		if ($cmdClass == 'ilcodequestionscoreintegrationpagegui') {
+			return false;
+		}
+		return $tabs->getActiveTab() == \ILIAS\Test\Presentation\TabsManager::TAB_ID_MANUAL_SCORING
+			|| in_array($cmdClass, array(
+				strtolower(\ILIAS\Test\Scoring\Manual\ConsecutiveScoringGUI::class),
+				'iltestscoringbyquestionsgui',
+				'iltestscoringgui'
+			));
 	}
 
 	function numberOfCodeQuestions() {
@@ -80,7 +86,7 @@ class ilCodeQuestionScoreIntegrationUIHookGUI extends ilUIHookPluginGUI {
 				// only resolve the services here: modifyGUI is also called during init (e.g. init_style)
 				$ilCtrl = $DIC->ctrl();
 				$ilTabs = $a_par['tabs'] ?? $DIC->tabs();
-				if ($this->isManualScoringClass($ilCtrl->getCmdClass())) {
+				if ($this->isManualScoringPage($ilCtrl->getCmdClass(), $ilTabs)) {
 					if (!$this->hasCodeQuestions) {
 						$this->hasCodeQuestions = $this->numberOfCodeQuestions() > 0;
 					}
@@ -88,6 +94,17 @@ class ilCodeQuestionScoreIntegrationUIHookGUI extends ilUIHookPluginGUI {
 						return;
 
 					$ilCtrl->saveParameterByClass('ilCodeQuestionScoreIntegrationPageGUI', 'ref_id');
+
+					// ILIAS >= 10 shows the manual scoring without sub tabs, and a single sub tab is not
+					// rendered at all: add one for the manual scoring itself (as in ILIAS 9)
+					if (count($ilTabs->sub_target) == 0) {
+						foreach ($ilTabs->target as $target) {
+							if ($target['id'] == \ILIAS\Test\Presentation\TabsManager::TAB_ID_MANUAL_SCORING) {
+								$ilTabs->addSubTab($target['id'], $DIC->language()->txt('manscoring'), $target['link']);
+								$ilTabs->activateSubTab($target['id']);
+							}
+						}
+					}
 
 					$ilTabs->addSubTab(
 						"scrintegration",
@@ -116,6 +133,7 @@ class ilCodeQuestionScoreIntegrationUIHookGUI extends ilUIHookPluginGUI {
 
 					// this works because the tabs are rendered after the sub tabs
 					$ilTabs->activateTab('manscoring');
+					$ilTabs->activateSubTab('scrintegration');
 				}
 
 				break;
